@@ -1,0 +1,10 @@
+<ModMetaData>
+	<name>AutoAnimalTraining</name>
+	<author>Philip</author>
+	<packageId>philip.autoanimaltraining</packageId>
+	<description>Automatically routes animals to a Training Zone when their training skills drop below threshold, enabling bulk training operations.</description>
+	<supportedVersions>
+		<li>1.6</li>
+	</supportedVersions>
+	<loadPriority>0</loadPriority>
+</ModMetaData>

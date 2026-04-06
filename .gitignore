@@ -1,0 +1,33 @@
+# === Build Artifacts ===
+Source/**/obj/
+Source/**/bin/
+*.user
+*.suo
+*.cache
+
+# === Internal Planning / Developer Notes ===
+# agent_communicate/ contains internal workflow docs, not for release
+agent_communicate/
+CLAUDE.md
+
+# === Game Dependencies (not shipped with mod) ===
+# References to Steam workshop paths are machine-specific and must not be committed
+# The .csproj uses HintPaths that resolve to local game + mod files
+# Ensure all <HintPath> values that point outside the mod folder are excluded below
+
+# === ILSpy Decompilation Cache ===
+.ilspy-cache/
+
+# === OS / Editor ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+~*
+
+# === RimWorld-specific ===
+# Log files generated at runtime
+*.log
+
+# Save files (not applicable to mod, but kept for safety)
+# *.rws
