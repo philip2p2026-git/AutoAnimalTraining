@@ -35,6 +35,11 @@ namespace AutoAnimalTraining
             Settings.pollIntervalTicks = (int)listing.Slider(Settings.pollIntervalTicks, 250, 10000);
             listing.Gap(6f);
             listing.Label("250 ticks = ~4 sec, 2000 ticks = ~33 sec, 10000 ticks = ~2.7 min");
+            listing.Gap(12f);
+
+            // Restrict training to zone
+            listing.CheckboxLabeled("Only train non-roaming animals inside the Training Zone", ref Settings.restrictTrainingToZone,
+                "When enabled, colonists will only train non-roaming tamed animals that are physically inside the Training Zone. Roamer animals are unaffected.");
             listing.Gap(16f);
 
             // Per-skill thresholds header
