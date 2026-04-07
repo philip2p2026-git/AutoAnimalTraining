@@ -6,10 +6,11 @@ namespace AutoAnimalTraining
 {
     public class MapComponent_AutoTraining : MapComponent
     {
-        private const string TrainingZoneName = "Training";
-
         private Area trainingZone;
         private bool zoneWarningLogged;
+        private int tickCounter;
+
+        private static AutoAnimalTrainingSettings Settings => AutoAnimalTrainingMod.Settings;
 
         public MapComponent_AutoTraining(Map map) : base(map)
         {
@@ -25,35 +26,55 @@ namespace AutoAnimalTraining
         {
             base.MapComponentTick();
 
-            // Run once every 2000 ticks (~33 seconds) on a TickLong-like cadence
-            if (Find.TickManager.TicksGame % 2000 != 0)
+            // Configurable poll interval for future animal training checks
+            tickCounter++;
+            if (tickCounter < Settings.pollIntervalTicks)
                 return;
+            tickCounter = 0;
 
+            // TODO Milestone 2: animal training degradation check will go here
+        }
+
+        /// <summary>
+        /// Called by Harmony patches when an area is created, deleted, or renamed.
+        /// Immediately re-evaluates whether the training zone exists.
+        /// </summary>
+        public void Notify_AreaChanged()
+        {
             ResolveTrainingZone();
         }
 
         private void ResolveTrainingZone()
         {
-            Area found = map.areaManager.GetLabeled(TrainingZoneName);
+            string zoneName = Settings.trainingZoneName;
+            Area found = map.areaManager.GetLabeled(zoneName);
 
             if (found != null && trainingZone != found)
             {
+                // Zone found (newly created or renamed to match)
                 trainingZone = found;
                 zoneWarningLogged = false;
 
                 int eligible = CountEligibleAnimals();
-                Log.Message($"[AutoAnimalTraining] Training Zone '{TrainingZoneName}' found — monitoring {eligible} eligible animals");
+                Log.Message($"[AutoAnimalTraining] Training Zone '{zoneName}' found — monitoring {eligible} eligible animals");
+                Messages.Message(
+                    $"[AutoAnimalTraining] Training Zone '{zoneName}' found — monitoring {eligible} eligible animals",
+                    MessageTypeDefOf.PositiveEvent, historical: false);
             }
             else if (found == null && trainingZone != null)
             {
-                // Zone was deleted
+                // Zone was deleted or renamed away
                 trainingZone = null;
                 zoneWarningLogged = false;
-                Log.Message($"[AutoAnimalTraining] Training Zone '{TrainingZoneName}' removed");
+
+                Log.Message($"[AutoAnimalTraining] Training Zone '{zoneName}' removed");
+                Messages.Message(
+                    $"[AutoAnimalTraining] Training Zone '{zoneName}' removed",
+                    MessageTypeDefOf.NeutralEvent, historical: false);
             }
             else if (found == null && !zoneWarningLogged)
             {
-                Log.Message($"[AutoAnimalTraining] Training Zone '{TrainingZoneName}' not found — create an area named '{TrainingZoneName}' to enable auto-routing");
+                Log.Message($"[AutoAnimalTraining] Training Zone '{zoneName}' not found — create an area named '{zoneName}' to enable auto-routing");
                 zoneWarningLogged = true;
             }
         }
