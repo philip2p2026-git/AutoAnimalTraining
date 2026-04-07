@@ -52,10 +52,11 @@ namespace AutoAnimalTraining
             {
                 TrainableDef td = allDefs[i];
                 int current = Settings.GetThresholdForSkill(td);
-                string stateLabel = current < 0 ? "OFF" : $"<= {current}";
+                string stateLabel = current < 0 ? "OFF" : (current >= td.steps ? "ALWAYS" : $"<= {current}");
+                int sliderMax = Mathf.Max(td.steps, current, AutoAnimalTrainingSettings.GetDefaultThreshold(td.defName));
 
                 listing.Label($"{td.LabelCap} (max {td.steps} steps): trigger {stateLabel}");
-                int newVal = (int)listing.Slider(current, -1, td.steps);
+                int newVal = (int)listing.Slider(current, -1, sliderMax);
                 Settings.SetThresholdForSkill(td, newVal);
                 listing.Gap(2f);
             }

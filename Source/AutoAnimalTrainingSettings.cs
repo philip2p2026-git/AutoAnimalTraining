@@ -20,13 +20,31 @@ namespace AutoAnimalTraining
         /// Returns the threshold for a specific trainable skill.
         /// -1 means this skill won't trigger routing.
         /// </summary>
+        // Actual vanilla max steps: Tameness=5, Obedience=3, Release=2, Rescue=2, Haul=7
+        private static readonly Dictionary<string, int> DefaultThresholds = new Dictionary<string, int>
+        {
+            { "Tameness", 4 },    // Route when steps <= 4 (out of 5)
+            { "Obedience", 2 },   // Route when steps <= 2 (out of 3)
+            { "Release", 1 },     // Route when steps <= 1 (out of 2)
+            { "Rescue", 1 },      // Route when steps <= 1 (out of 2)
+            { "Haul", 6 },        // Route when steps <= 6 (out of 7)
+        };
+
+        /// <summary>
+        /// Returns the default threshold for a skill.
+        /// Known skills have preset defaults; unknown skills default to -1 (disabled).
+        /// </summary>
+        public static int GetDefaultThreshold(string defName)
+        {
+            return DefaultThresholds.TryGetValue(defName, out int val) ? val : -1;
+        }
+
         public int GetThresholdForSkill(TrainableDef td)
         {
             if (skillThresholds.TryGetValue(td.defName, out int val))
                 return val;
 
-            // Default: enable Tameness at threshold 1, all others disabled (-1)
-            return td.defName == "Tameness" ? 1 : -1;
+            return GetDefaultThreshold(td.defName);
         }
 
         public void SetThresholdForSkill(TrainableDef td, int value)
@@ -45,7 +63,7 @@ namespace AutoAnimalTraining
             {
                 if (!skillThresholds.ContainsKey(allDefs[i].defName))
                 {
-                    skillThresholds[allDefs[i].defName] = allDefs[i].defName == "Tameness" ? 1 : -1;
+                    skillThresholds[allDefs[i].defName] = GetDefaultThreshold(allDefs[i].defName);
                 }
             }
         }

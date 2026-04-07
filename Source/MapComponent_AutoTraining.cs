@@ -93,9 +93,12 @@ namespace AutoAnimalTraining
                 }
 
                 bool alreadyRouted = originalAreas.ContainsKey(pawn);
+                bool needsTraining = NeedsTraining(pawn);
+                bool onCooldown = TrainableUtility.TrainedTooRecently(pawn);
 
-                if (NeedsTraining(pawn))
+                if (needsTraining && !onCooldown)
                 {
+                    // Needs training and can be trained now — route to zone
                     if (!alreadyRouted)
                     {
                         AssignToTrainingZone(pawn);
@@ -103,7 +106,15 @@ namespace AutoAnimalTraining
                 }
                 else if (alreadyRouted)
                 {
-                    ReleaseFromTrainingZone(pawn);
+                    // Either training complete OR on cooldown — release back
+                    if (!needsTraining)
+                    {
+                        ReleaseFromTrainingZone(pawn);
+                    }
+                    else if (onCooldown)
+                    {
+                        ReleaseFromTrainingZone(pawn, cooldown: true);
+                    }
                 }
             }
 
@@ -255,7 +266,7 @@ namespace AutoAnimalTraining
             Log.Message($"[AutoAnimalTraining] {pawn.LabelShort} ({kindLabel}) routed to Training Zone — {trainableInfo}");
         }
 
-        private void ReleaseFromTrainingZone(Pawn pawn)
+        private void ReleaseFromTrainingZone(Pawn pawn, bool cooldown = false)
         {
             if (!originalAreas.TryGetValue(pawn, out Area originalArea))
                 return;
@@ -271,7 +282,14 @@ namespace AutoAnimalTraining
             originalAreas.Remove(pawn);
 
             string kindLabel = pawn.kindDef?.label ?? "Animal";
-            Log.Message($"[AutoAnimalTraining] {pawn.LabelShort} ({kindLabel}) released from Training Zone — training restored");
+            if (cooldown)
+            {
+                Log.Message($"[AutoAnimalTraining] {pawn.LabelShort} ({kindLabel}) released from Training Zone — on cooldown, will re-route when ready");
+            }
+            else
+            {
+                Log.Message($"[AutoAnimalTraining] {pawn.LabelShort} ({kindLabel}) released from Training Zone — training restored");
+            }
         }
 
         private void RevertAllAnimals()
