@@ -33,6 +33,13 @@ namespace AutoAnimalTraining
             Settings.pollIntervalTicks = (int)listing.Slider(Settings.pollIntervalTicks, 250, 10000);
             listing.Gap(6f);
             listing.Label("250 ticks = ~4 sec, 2000 ticks = ~33 sec, 10000 ticks = ~2.7 min");
+            listing.Gap(12f);
+
+            // Steps threshold
+            listing.Label($"Steps threshold for routing: {Settings.stepsThreshold}");
+            Settings.stepsThreshold = (int)listing.Slider(Settings.stepsThreshold, 0, 5);
+            listing.Gap(6f);
+            listing.Label("Route animal to zone when any wanted trainable has steps <= this value.");
 
             listing.End();
         }
