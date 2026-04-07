@@ -40,6 +40,11 @@ namespace AutoAnimalTraining
             // Restrict training to zone
             listing.CheckboxLabeled("Only train non-roaming animals inside the Training Zone", ref Settings.restrictTrainingToZone,
                 "When enabled, colonists will only train non-roaming tamed animals that are physically inside the Training Zone. Roamer animals are unaffected.");
+            listing.Gap(12f);
+
+            // Verbose logging
+            listing.CheckboxLabeled("Verbose logging", ref Settings.verboseLogging,
+                "When enabled, logs every route/release event per animal. When disabled, only logs first route and final release per animal.");
             listing.Gap(16f);
 
             // Per-skill thresholds header

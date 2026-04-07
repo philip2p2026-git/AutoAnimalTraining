@@ -9,6 +9,7 @@ namespace AutoAnimalTraining
         public string trainingZoneName = "@Training";
         public int pollIntervalTicks = 2000;
         public bool restrictTrainingToZone = true;
+        public bool verboseLogging = false;
 
         /// <summary>
         /// Per-skill step thresholds. Key = TrainableDef.defName, Value = threshold.
@@ -74,6 +75,7 @@ namespace AutoAnimalTraining
             Scribe_Values.Look(ref trainingZoneName, "trainingZoneName", "@Training");
             Scribe_Values.Look(ref pollIntervalTicks, "pollIntervalTicks", 2000);
             Scribe_Values.Look(ref restrictTrainingToZone, "restrictTrainingToZone", true);
+            Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Collections.Look(ref skillThresholds, "skillThresholds", LookMode.Value, LookMode.Value);
             if (skillThresholds == null)
                 skillThresholds = new Dictionary<string, int>();

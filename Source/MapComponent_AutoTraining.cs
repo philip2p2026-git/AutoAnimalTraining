@@ -20,6 +20,12 @@ namespace AutoAnimalTraining
         /// </summary>
         private Dictionary<Pawn, Area> originalAreas = new Dictionary<Pawn, Area>();
 
+        /// <summary>
+        /// Tracks which animals have already been logged as routed.
+        /// Prevents log spam from the route/release cooldown ping-pong cycle.
+        /// </summary>
+        private HashSet<Pawn> loggedAsRouted = new HashSet<Pawn>();
+
         private static AutoAnimalTrainingSettings Settings => AutoAnimalTrainingMod.Settings;
 
         // Cached reflection field for Pawn_TrainingTracker.steps (internal)
@@ -67,6 +73,63 @@ namespace AutoAnimalTraining
             }
         }
 
+        /// <summary>
+        /// Save/load support. Persists tracked animals and their original areas across saves.
+        /// </summary>
+        public override void ExposeData()
+        {
+            base.ExposeData();
+
+            // We save the tracked animals as parallel lists (Scribe can't handle Dict<Pawn, Area> directly with null values)
+            List<Pawn> trackedPawns = null;
+            List<string> originalAreaLabels = null;
+
+            if (Scribe.mode == LoadSaveMode.Saving)
+            {
+                trackedPawns = new List<Pawn>(originalAreas.Keys);
+                originalAreaLabels = new List<string>();
+                foreach (var kvp in originalAreas)
+                {
+                    // Save the area label string (null area = "null" sentinel)
+                    originalAreaLabels.Add(kvp.Value?.Label ?? "<<null>>");
+                }
+            }
+
+            Scribe_Collections.Look(ref trackedPawns, "trackedPawns", LookMode.Reference);
+            Scribe_Collections.Look(ref originalAreaLabels, "originalAreaLabels", LookMode.Value);
+
+            if (Scribe.mode == LoadSaveMode.PostLoadInit)
+            {
+                originalAreas = new Dictionary<Pawn, Area>();
+                loggedAsRouted = new HashSet<Pawn>();
+
+                if (trackedPawns != null && originalAreaLabels != null)
+                {
+                    for (int i = 0; i < trackedPawns.Count && i < originalAreaLabels.Count; i++)
+                    {
+                        Pawn pawn = trackedPawns[i];
+                        if (pawn == null) continue; // Reference didn't resolve (sold/dead)
+
+                        string areaLabel = originalAreaLabels[i];
+                        Area restoredArea = null;
+                        if (areaLabel != "<<null>>")
+                        {
+                            restoredArea = map.areaManager.GetLabeled(areaLabel);
+                        }
+
+                        originalAreas[pawn] = restoredArea;
+                        loggedAsRouted.Add(pawn); // They were already routed before save
+                    }
+
+                    int count = originalAreas.Count;
+                    if (count > 0)
+                    {
+                        Log.Message($"[AutoAnimalTraining] Load complete — restored {count} tracked animals");
+                    }
+                }
+            }
+        }
+
         private void CheckAnimalsForRouting()
         {
             var pawns = map.mapPawns.SpawnedPawnsInFaction(Faction.OfPlayer);
@@ -78,7 +141,10 @@ namespace AutoAnimalTraining
             if (runDiagnostic)
             {
                 diagnosticLogged = true;
-                Log.Message($"[AutoAnimalTraining] === Diagnostic: per-skill thresholds, StepsField={StepsField != null} ===");
+                if (Settings.verboseLogging)
+                {
+                    Log.Message($"[AutoAnimalTraining] === Diagnostic: per-skill thresholds, StepsField={StepsField != null} ===");
+                }
             }
 
             for (int i = 0; i < pawns.Count; i++)
@@ -87,7 +153,7 @@ namespace AutoAnimalTraining
                 if (!IsEligibleForAutoTraining(pawn))
                     continue;
 
-                if (runDiagnostic)
+                if (runDiagnostic && Settings.verboseLogging)
                 {
                     LogAnimalDiagnostic(pawn);
                 }
@@ -109,7 +175,7 @@ namespace AutoAnimalTraining
                     // Either training complete OR on cooldown — release back
                     if (!needsTraining)
                     {
-                        ReleaseFromTrainingZone(pawn);
+                        ReleaseFromTrainingZone(pawn, cooldown: false);
                     }
                     else if (onCooldown)
                     {
@@ -256,14 +322,19 @@ namespace AutoAnimalTraining
             // Interrupt current job so pathfinding re-evaluates with new area
             pawn.jobs?.EndCurrentJob(JobCondition.InterruptForced);
 
-            // Log
-            var degraded = GetFirstDegradedTrainable(pawn);
-            string trainableInfo = degraded.HasValue
-                ? $"{degraded.Value.trainable.LabelCap} at {degraded.Value.steps} step(s)"
-                : "training needed";
-            string kindLabel = pawn.kindDef?.label ?? "Animal";
+            // Log only on first route (suppress repeated route/release ping-pong)
+            bool alreadyLoggedRoute = loggedAsRouted.Contains(pawn);
+            if (!alreadyLoggedRoute || Settings.verboseLogging)
+            {
+                var degraded = GetFirstDegradedTrainable(pawn);
+                string trainableInfo = degraded.HasValue
+                    ? $"{degraded.Value.trainable.LabelCap} at {degraded.Value.steps} step(s)"
+                    : "training needed";
+                string kindLabel = pawn.kindDef?.label ?? "Animal";
 
-            Log.Message($"[AutoAnimalTraining] {pawn.LabelShort} ({kindLabel}) routed to Training Zone — {trainableInfo}");
+                Log.Message($"[AutoAnimalTraining] {pawn.LabelShort} ({kindLabel}) routed to Training Zone — {trainableInfo}");
+                loggedAsRouted.Add(pawn);
+            }
         }
 
         private void ReleaseFromTrainingZone(Pawn pawn, bool cooldown = false)
@@ -284,11 +355,17 @@ namespace AutoAnimalTraining
             string kindLabel = pawn.kindDef?.label ?? "Animal";
             if (cooldown)
             {
-                Log.Message($"[AutoAnimalTraining] {pawn.LabelShort} ({kindLabel}) released from Training Zone — on cooldown, will re-route when ready");
+                // Cooldown release: only log if verbose (this is the spammy one)
+                if (Settings.verboseLogging)
+                {
+                    Log.Message($"[AutoAnimalTraining] {pawn.LabelShort} ({kindLabel}) released from Training Zone — on cooldown, will re-route when ready");
+                }
             }
             else
             {
+                // Training complete: always log and clear the logged-route tracker
                 Log.Message($"[AutoAnimalTraining] {pawn.LabelShort} ({kindLabel}) released from Training Zone — training restored");
+                loggedAsRouted.Remove(pawn);
             }
         }
 
@@ -310,6 +387,7 @@ namespace AutoAnimalTraining
 
             int count = originalAreas.Count;
             originalAreas.Clear();
+            loggedAsRouted.Clear();
             Log.Message($"[AutoAnimalTraining] Zone deleted — reverted {count} animals to original areas");
         }
 
@@ -325,6 +403,7 @@ namespace AutoAnimalTraining
             for (int i = 0; i < staleKeys.Count; i++)
             {
                 originalAreas.Remove(staleKeys[i]);
+                loggedAsRouted.Remove(staleKeys[i]);
             }
         }
 
