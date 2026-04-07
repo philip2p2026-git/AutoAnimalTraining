@@ -47,18 +47,16 @@ namespace AutoAnimalTraining.Patches
     }
 
     /// <summary>
-    /// Postfix on Area.set_RenamableLabel — fires when an area is renamed via the UI dialog.
+    /// Postfix on Area_Allowed.set_RenamableLabel — fires when an area is renamed via the UI dialog.
+    /// Must target Area_Allowed directly because it overrides the base Area property.
     /// </summary>
-    [HarmonyPatch(typeof(Area), nameof(Area.RenamableLabel), MethodType.Setter)]
-    public static class Patch_Area_RenamableLabel_Set
+    [HarmonyPatch(typeof(Area_Allowed), nameof(Area_Allowed.RenamableLabel), MethodType.Setter)]
+    public static class Patch_AreaAllowed_RenamableLabel_Set
     {
-        public static void Postfix(Area __instance)
+        public static void Postfix(Area_Allowed __instance)
         {
-            if (__instance is Area_Allowed)
-            {
-                MapComponent_AutoTraining comp = __instance.Map.GetComponent<MapComponent_AutoTraining>();
-                comp?.Notify_AreaChanged();
-            }
+            MapComponent_AutoTraining comp = __instance.Map.GetComponent<MapComponent_AutoTraining>();
+            comp?.Notify_AreaChanged();
         }
     }
 }
