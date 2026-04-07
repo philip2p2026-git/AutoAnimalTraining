@@ -26,6 +26,10 @@ namespace AutoAnimalTraining
         /// </summary>
         private HashSet<Pawn> loggedAsRouted = new HashSet<Pawn>();
 
+        // Save/load scratch fields — must persist across ExposeData phases (LoadingVars → ResolvingCrossRefs → PostLoadInit)
+        private List<Pawn> saveLoad_trackedPawns;
+        private List<string> saveLoad_originalAreaLabels;
+
         private static AutoAnimalTrainingSettings Settings => AutoAnimalTrainingMod.Settings;
 
         // Cached reflection field for Pawn_TrainingTracker.steps (internal)
@@ -75,46 +79,51 @@ namespace AutoAnimalTraining
 
         /// <summary>
         /// Save/load support. Persists tracked animals and their original areas across saves.
+        /// Uses class fields (saveLoad_trackedPawns, saveLoad_originalAreaLabels) because
+        /// ExposeData is called multiple times during loading (LoadingVars, ResolvingCrossRefs,
+        /// PostLoadInit) and LookMode.Reference needs the list to persist between phases.
         /// </summary>
         public override void ExposeData()
         {
             base.ExposeData();
 
-            // We save the tracked animals as parallel lists (Scribe can't handle Dict<Pawn, Area> directly with null values)
-            List<Pawn> trackedPawns = null;
-            List<string> originalAreaLabels = null;
-
+            // Prepare parallel lists for saving
             if (Scribe.mode == LoadSaveMode.Saving)
             {
-                trackedPawns = new List<Pawn>(originalAreas.Keys);
-                originalAreaLabels = new List<string>();
+                saveLoad_trackedPawns = new List<Pawn>(originalAreas.Keys);
+                saveLoad_originalAreaLabels = new List<string>();
                 foreach (var kvp in originalAreas)
                 {
-                    // Save the area label string (null area = "null" sentinel)
-                    originalAreaLabels.Add(kvp.Value?.Label ?? "<<null>>");
+                    saveLoad_originalAreaLabels.Add(kvp.Value?.Label ?? "<<null>>");
                 }
             }
 
-            Scribe_Collections.Look(ref trackedPawns, "trackedPawns", LookMode.Reference);
-            Scribe_Collections.Look(ref originalAreaLabels, "originalAreaLabels", LookMode.Value);
+            // Scribe calls — these persist across LoadingVars → ResolvingCrossRefs because the fields survive between ExposeData invocations
+            Scribe_Collections.Look(ref saveLoad_trackedPawns, "trackedPawns", LookMode.Reference);
+            Scribe_Collections.Look(ref saveLoad_originalAreaLabels, "originalAreaLabels", LookMode.Value);
 
+            // Reconstruct runtime state after all cross-refs are resolved
             if (Scribe.mode == LoadSaveMode.PostLoadInit)
             {
                 originalAreas = new Dictionary<Pawn, Area>();
                 loggedAsRouted = new HashSet<Pawn>();
 
-                if (trackedPawns != null && originalAreaLabels != null)
+                if (saveLoad_trackedPawns != null && saveLoad_originalAreaLabels != null)
                 {
-                    for (int i = 0; i < trackedPawns.Count && i < originalAreaLabels.Count; i++)
+                    for (int i = 0; i < saveLoad_trackedPawns.Count && i < saveLoad_originalAreaLabels.Count; i++)
                     {
-                        Pawn pawn = trackedPawns[i];
+                        Pawn pawn = saveLoad_trackedPawns[i];
                         if (pawn == null) continue; // Reference didn't resolve (sold/dead)
 
-                        string areaLabel = originalAreaLabels[i];
+                        string areaLabel = saveLoad_originalAreaLabels[i];
                         Area restoredArea = null;
                         if (areaLabel != "<<null>>")
                         {
                             restoredArea = map.areaManager.GetLabeled(areaLabel);
+                            if (restoredArea == null)
+                            {
+                                Log.Warning($"[AutoAnimalTraining] Could not find original area '{areaLabel}' for {pawn.LabelShort} — will release to unrestricted");
+                            }
                         }
 
                         originalAreas[pawn] = restoredArea;
@@ -127,6 +136,10 @@ namespace AutoAnimalTraining
                         Log.Message($"[AutoAnimalTraining] Load complete — restored {count} tracked animals");
                     }
                 }
+
+                // Clear scratch fields
+                saveLoad_trackedPawns = null;
+                saveLoad_originalAreaLabels = null;
             }
         }
 
