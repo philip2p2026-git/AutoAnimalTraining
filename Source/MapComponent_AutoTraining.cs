@@ -12,6 +12,7 @@ namespace AutoAnimalTraining
         private Area trainingZone;
         private bool zoneWarningLogged;
         private int tickCounter;
+        private bool diagnosticLogged;
 
         /// <summary>
         /// Stores each animal's original area restriction before we override it.
@@ -72,11 +73,24 @@ namespace AutoAnimalTraining
             if (pawns == null)
                 return;
 
+            // One-time diagnostic: log each eligible animal's training state
+            bool runDiagnostic = !diagnosticLogged;
+            if (runDiagnostic)
+            {
+                diagnosticLogged = true;
+                Log.Message($"[AutoAnimalTraining] === Diagnostic: per-skill thresholds, StepsField={StepsField != null} ===");
+            }
+
             for (int i = 0; i < pawns.Count; i++)
             {
                 Pawn pawn = pawns[i];
                 if (!IsEligibleForAutoTraining(pawn))
                     continue;
+
+                if (runDiagnostic)
+                {
+                    LogAnimalDiagnostic(pawn);
+                }
 
                 bool alreadyRouted = originalAreas.ContainsKey(pawn);
 
@@ -97,6 +111,38 @@ namespace AutoAnimalTraining
             CleanupStaleEntries();
         }
 
+        private void LogAnimalDiagnostic(Pawn pawn)
+        {
+            var tracker = pawn.training;
+            if (tracker == null)
+            {
+                Log.Message($"[AutoAnimalTraining]   {pawn.LabelShort}: training=null");
+                return;
+            }
+
+            var stepsMap = StepsField?.GetValue(tracker) as DefMap<TrainableDef, int>;
+            if (stepsMap == null)
+            {
+                Log.Message($"[AutoAnimalTraining]   {pawn.LabelShort}: stepsMap=null (reflection failed)");
+                return;
+            }
+
+            var allTrainables = DefDatabase<TrainableDef>.AllDefsListForReading;
+            string info = "";
+            for (int i = 0; i < allTrainables.Count; i++)
+            {
+                TrainableDef td = allTrainables[i];
+                bool wanted = tracker.GetWanted(td);
+                int current = stepsMap[td];
+                bool learned = tracker.HasLearned(td);
+                int skillThreshold = Settings.GetThresholdForSkill(td);
+                string thresholdStr = skillThreshold < 0 ? "off" : $"<={skillThreshold}";
+                info += $"\n    {td.defName}: wanted={wanted}, steps={current}/{td.steps}, learned={learned}, trigger={thresholdStr}";
+            }
+
+            Log.Message($"[AutoAnimalTraining]   {pawn.LabelShort} ({pawn.kindDef?.label}):{info}");
+        }
+
         private bool IsEligibleForAutoTraining(Pawn pawn)
         {
             return pawn.RaceProps.Animal
@@ -107,7 +153,8 @@ namespace AutoAnimalTraining
         }
 
         /// <summary>
-        /// Returns true if any wanted trainable has steps &lt;= threshold.
+        /// Returns true if any wanted trainable has steps &lt;= its per-skill threshold.
+        /// A threshold of -1 means that skill is disabled and won't trigger routing.
         /// </summary>
         private bool NeedsTraining(Pawn pawn)
         {
@@ -119,7 +166,6 @@ namespace AutoAnimalTraining
             if (stepsMap == null)
                 return false;
 
-            int threshold = Settings.stepsThreshold;
             var allTrainables = DefDatabase<TrainableDef>.AllDefsListForReading;
 
             for (int i = 0; i < allTrainables.Count; i++)
@@ -127,6 +173,10 @@ namespace AutoAnimalTraining
                 TrainableDef td = allTrainables[i];
                 if (!tracker.GetWanted(td))
                     continue;
+
+                int threshold = Settings.GetThresholdForSkill(td);
+                if (threshold < 0)
+                    continue; // This skill is disabled
 
                 int currentSteps = stepsMap[td];
                 if (currentSteps <= threshold && currentSteps < td.steps)
@@ -151,13 +201,16 @@ namespace AutoAnimalTraining
             if (stepsMap == null)
                 return null;
 
-            int threshold = Settings.stepsThreshold;
             var allTrainables = DefDatabase<TrainableDef>.AllDefsListForReading;
 
             for (int i = 0; i < allTrainables.Count; i++)
             {
                 TrainableDef td = allTrainables[i];
                 if (!tracker.GetWanted(td))
+                    continue;
+
+                int threshold = Settings.GetThresholdForSkill(td);
+                if (threshold < 0)
                     continue;
 
                 int currentSteps = stepsMap[td];
@@ -266,6 +319,7 @@ namespace AutoAnimalTraining
             {
                 trainingZone = found;
                 zoneWarningLogged = false;
+                diagnosticLogged = false;
 
                 int eligible = CountEligibleAnimals();
                 Log.Message($"[AutoAnimalTraining] Training Zone '{zoneName}' found — monitoring {eligible} eligible animals");

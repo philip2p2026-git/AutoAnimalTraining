@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using HarmonyLib;
+using RimWorld;
 using UnityEngine;
 using Verse;
 
@@ -33,13 +35,30 @@ namespace AutoAnimalTraining
             Settings.pollIntervalTicks = (int)listing.Slider(Settings.pollIntervalTicks, 250, 10000);
             listing.Gap(6f);
             listing.Label("250 ticks = ~4 sec, 2000 ticks = ~33 sec, 10000 ticks = ~2.7 min");
-            listing.Gap(12f);
+            listing.Gap(16f);
 
-            // Steps threshold
-            listing.Label($"Steps threshold for routing: {Settings.stepsThreshold}");
-            Settings.stepsThreshold = (int)listing.Slider(Settings.stepsThreshold, 0, 5);
-            listing.Gap(6f);
-            listing.Label("Route animal to zone when any wanted trainable has steps <= this value.");
+            // Per-skill thresholds header
+            listing.Label("--- Skill Step Triggers ---");
+            listing.Gap(4f);
+            listing.Label("Route animal when a wanted skill's steps <= threshold. Set to -1 to disable that skill.");
+            listing.Gap(8f);
+
+            // Ensure all defs are in the dictionary
+            Settings.EnsureAllSkillsPresent();
+
+            // Show slider for each TrainableDef
+            List<TrainableDef> allDefs = DefDatabase<TrainableDef>.AllDefsListForReading;
+            for (int i = 0; i < allDefs.Count; i++)
+            {
+                TrainableDef td = allDefs[i];
+                int current = Settings.GetThresholdForSkill(td);
+                string stateLabel = current < 0 ? "OFF" : $"<= {current}";
+
+                listing.Label($"{td.LabelCap} (max {td.steps} steps): trigger {stateLabel}");
+                int newVal = (int)listing.Slider(current, -1, td.steps);
+                Settings.SetThresholdForSkill(td, newVal);
+                listing.Gap(2f);
+            }
 
             listing.End();
         }
